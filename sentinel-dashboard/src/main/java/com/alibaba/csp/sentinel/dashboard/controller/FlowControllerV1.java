@@ -30,10 +30,13 @@ import com.alibaba.csp.sentinel.dashboard.datasource.entity.rule.FlowRuleEntity;
 import com.alibaba.csp.sentinel.dashboard.discovery.MachineInfo;
 import com.alibaba.csp.sentinel.dashboard.domain.Result;
 import com.alibaba.csp.sentinel.dashboard.repository.rule.InMemoryRuleRepositoryAdapter;
+import com.alibaba.csp.sentinel.dashboard.rule.DynamicRuleProvider;
+import com.alibaba.csp.sentinel.dashboard.rule.DynamicRulePublisher;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -60,6 +63,13 @@ public class FlowControllerV1 {
 
     @Autowired
     private SentinelApiClient sentinelApiClient;
+    
+    @Autowired
+    @Qualifier("flowRuleApolloProvider")
+    private DynamicRuleProvider<List<FlowRuleEntity>> ruleProvider;
+    @Autowired
+    @Qualifier("flowRuleApolloPublisher")
+    private DynamicRulePublisher<List<FlowRuleEntity>> rulePublisher;
 
     @GetMapping("/rules")
     @AuthAction(PrivilegeType.READ_RULE)
@@ -266,8 +276,9 @@ public class FlowControllerV1 {
         }
     }
 
-    private CompletableFuture<Void> publishRules(String app, String ip, Integer port) {
+    private CompletableFuture<Void> publishRules(String app, String ip, Integer port) throws Exception {
         List<FlowRuleEntity> rules = repository.findAllByMachine(MachineInfo.of(app, ip, port));
+		rulePublisher.publish(app, rules);
         return sentinelApiClient.setFlowRuleOfMachineAsync(app, ip, port, rules);
     }
 }
