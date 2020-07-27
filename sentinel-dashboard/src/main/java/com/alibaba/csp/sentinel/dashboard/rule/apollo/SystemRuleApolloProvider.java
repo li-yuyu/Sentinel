@@ -22,11 +22,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import com.alibaba.csp.sentinel.dashboard.datasource.entity.rule.FlowRuleEntity;
+import com.alibaba.csp.sentinel.dashboard.datasource.entity.rule.SystemRuleEntity;
 import com.alibaba.csp.sentinel.dashboard.rule.DynamicRuleProvider;
 import com.alibaba.csp.sentinel.datasource.Converter;
 import com.alibaba.csp.sentinel.util.StringUtil;
-
 import com.ctrip.framework.apollo.openapi.client.ApolloOpenApiClient;
 import com.ctrip.framework.apollo.openapi.dto.OpenItemDTO;
 import com.ctrip.framework.apollo.openapi.dto.OpenNamespaceDTO;
@@ -35,19 +34,19 @@ import com.ctrip.framework.apollo.openapi.dto.OpenNamespaceDTO;
  * @author Lyle
  * @since 2020年7月27日 上午9:42:17 
  */
-@Component("flowRuleApolloProvider")
-public class FlowRuleApolloProvider implements DynamicRuleProvider<List<FlowRuleEntity>> {
+@Component("systemRuleApolloProvider")
+public class SystemRuleApolloProvider implements DynamicRuleProvider<List<SystemRuleEntity>> {
 
 	@Value("${app.id}")
 	String appId;
     @Autowired
     private ApolloOpenApiClient apolloOpenApiClient;
     @Autowired
-    private Converter<String, List<FlowRuleEntity>> converter;
+    private Converter<String, List<SystemRuleEntity>> converter;
 
     @Override
-    public List<FlowRuleEntity> getRules(String appName) throws Exception {
-        String ruleKey = ApolloConfigUtil.getFlowRuleKey(appName);
+    public List<SystemRuleEntity> getRules(String appName) throws Exception {
+        String ruleKey = ApolloConfigUtil.getSystemRuleKey(appName);
         OpenNamespaceDTO openNamespaceDTO = apolloOpenApiClient.getNamespace(appId, "DEV", "default", "BASE.sentinel-rule");
         String rules = openNamespaceDTO
             .getItems()

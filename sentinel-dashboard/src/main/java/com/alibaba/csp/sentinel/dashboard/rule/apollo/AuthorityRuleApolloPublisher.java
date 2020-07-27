@@ -21,11 +21,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import com.alibaba.csp.sentinel.dashboard.datasource.entity.rule.FlowRuleEntity;
+import com.alibaba.csp.sentinel.dashboard.datasource.entity.rule.AuthorityRuleEntity;
 import com.alibaba.csp.sentinel.dashboard.rule.DynamicRulePublisher;
 import com.alibaba.csp.sentinel.datasource.Converter;
 import com.alibaba.csp.sentinel.util.AssertUtil;
-
 import com.ctrip.framework.apollo.openapi.client.ApolloOpenApiClient;
 import com.ctrip.framework.apollo.openapi.dto.NamespaceReleaseDTO;
 import com.ctrip.framework.apollo.openapi.dto.OpenItemDTO;
@@ -34,29 +33,29 @@ import com.ctrip.framework.apollo.openapi.dto.OpenItemDTO;
  * @author Lyle
  * @since 2020年7月27日 上午9:42:28 
  */
-@Component("flowRuleApolloPublisher")
-public class FlowRuleApolloPublisher implements DynamicRulePublisher<List<FlowRuleEntity>> {
+@Component("authorityRuleApolloPublisher")
+public class AuthorityRuleApolloPublisher implements DynamicRulePublisher<List<AuthorityRuleEntity>> {
 
 	@Value("${app.id}")
 	String appId;
     @Autowired
     private ApolloOpenApiClient apolloOpenApiClient;
     @Autowired
-    private Converter<List<FlowRuleEntity>, String> converter;
+    private Converter<List<AuthorityRuleEntity>, String> converter;
 
     @Override
-    public void publish(String app, List<FlowRuleEntity> rules) throws Exception {
+    public void publish(String app, List<AuthorityRuleEntity> rules) throws Exception {
         AssertUtil.notEmpty(app, "app name cannot be empty");
         if (rules == null) {
             return;
         }
 
         // Increase the configuration
-        String ruleKey = ApolloConfigUtil.getFlowRuleKey(app);
+        String ruleKey = ApolloConfigUtil.getAuthorityRuleKey(app);
         OpenItemDTO openItemDTO = new OpenItemDTO();
         openItemDTO.setKey(ruleKey);
         openItemDTO.setValue(converter.convert(rules));
-        openItemDTO.setComment(app+"流控规则");
+        openItemDTO.setComment(app+"授权规则");
         openItemDTO.setDataChangeCreatedBy("liyuyu");
         apolloOpenApiClient.createOrUpdateItem(appId, "DEV", "default", "BASE.sentinel-rule", openItemDTO);
 
