@@ -55,7 +55,7 @@
 //        OpenItemDTO openItemDTO = new OpenItemDTO();
 //        openItemDTO.setKey(ruleKey);
 //        openItemDTO.setValue(converter.convert(rules));
-//        openItemDTO.setComment(app+"流控规则");
+//        openItemDTO.setComment(app+"热点参数流控规则");
 //        openItemDTO.setDataChangeCreatedBy("liyuyu");
 //        apolloOpenApiClient.createOrUpdateItem(appId, "DEV", "default", "BASE.sentinel-rule", openItemDTO);
 //
