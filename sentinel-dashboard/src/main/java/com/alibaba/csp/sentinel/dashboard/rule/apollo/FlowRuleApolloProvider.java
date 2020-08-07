@@ -33,33 +33,33 @@ import com.ctrip.framework.apollo.openapi.dto.OpenNamespaceDTO;
 
 /**
  * @author Lyle
- * @since 2020年7月27日 上午9:42:17 
+ * @since 2020年7月27日 上午9:42:17
  */
 @Component("flowRuleApolloProvider")
 public class FlowRuleApolloProvider implements DynamicRuleProvider<List<FlowRuleEntity>> {
 
 	@Value("${app.id}")
 	String appId;
-    @Autowired
-    private ApolloOpenApiClient apolloOpenApiClient;
-    @Autowired
-    private Converter<String, List<FlowRuleEntity>> converter;
+	@Value("${apollo.rule.namespace}")
+	String ruleNamespace;
+	@Value("${spring.profiles.active}")
+	private String active;
+	@Autowired
+	private ApolloOpenApiClient apolloOpenApiClient;
+	@Autowired
+	private Converter<String, List<FlowRuleEntity>> converter;
 
-    @Override
-    public List<FlowRuleEntity> getRules(String appName) throws Exception {
-        String ruleKey = ApolloConfigUtil.getFlowRuleKey(appName);
-        OpenNamespaceDTO openNamespaceDTO = apolloOpenApiClient.getNamespace(appId, "DEV", "default", "BASE.sentinel-rule");
-        String rules = openNamespaceDTO
-            .getItems()
-            .stream()
-            .filter(p -> p.getKey().equals(ruleKey))
-            .map(OpenItemDTO::getValue)
-            .findFirst()
-            .orElse("");
+	@Override
+	public List<FlowRuleEntity> getRules(String appName) throws Exception {
+		String ruleKey = ApolloConfigUtil.getFlowRuleKey(appName);
+		OpenNamespaceDTO openNamespaceDTO = apolloOpenApiClient.getNamespace(appId, ApolloConfigUtil.getEnv(active),
+				ApolloConfigUtil.getCluster(active), ruleNamespace);
+		String rules = openNamespaceDTO.getItems().stream().filter(p -> p.getKey().equals(ruleKey))
+				.map(OpenItemDTO::getValue).findFirst().orElse("");
 
-        if (StringUtil.isEmpty(rules)) {
-            return new ArrayList<>();
-        }
-        return converter.convert(rules);
-    }
+		if (StringUtil.isEmpty(rules)) {
+			return new ArrayList<>();
+		}
+		return converter.convert(rules);
+	}
 }

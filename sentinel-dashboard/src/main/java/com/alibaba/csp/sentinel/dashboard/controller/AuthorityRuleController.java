@@ -15,22 +15,11 @@
  */
 package com.alibaba.csp.sentinel.dashboard.controller;
 
+import java.text.MessageFormat;
 import java.util.Date;
 import java.util.List;
 
-import com.alibaba.csp.sentinel.dashboard.auth.AuthAction;
-import com.alibaba.csp.sentinel.dashboard.client.SentinelApiClient;
-import com.alibaba.csp.sentinel.dashboard.discovery.MachineInfo;
-import com.alibaba.csp.sentinel.dashboard.auth.AuthService.PrivilegeType;
-import com.alibaba.csp.sentinel.slots.block.RuleConstant;
-import com.alibaba.csp.sentinel.util.StringUtil;
-
-import com.alibaba.csp.sentinel.dashboard.datasource.entity.rule.AuthorityRuleEntity;
-import com.alibaba.csp.sentinel.dashboard.datasource.entity.rule.SystemRuleEntity;
-import com.alibaba.csp.sentinel.dashboard.domain.Result;
-import com.alibaba.csp.sentinel.dashboard.repository.rule.RuleRepository;
-import com.alibaba.csp.sentinel.dashboard.rule.DynamicRuleProvider;
-import com.alibaba.csp.sentinel.dashboard.rule.DynamicRulePublisher;
+import javax.servlet.http.HttpServletRequest;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +34,17 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.alibaba.csp.sentinel.dashboard.auth.AuthAction;
+import com.alibaba.csp.sentinel.dashboard.auth.AuthService.PrivilegeType;
+import com.alibaba.csp.sentinel.dashboard.datasource.entity.rule.AuthorityRuleEntity;
+import com.alibaba.csp.sentinel.dashboard.domain.Result;
+import com.alibaba.csp.sentinel.dashboard.repository.rule.RuleRepository;
+import com.alibaba.csp.sentinel.dashboard.rule.DynamicRuleProvider;
+import com.alibaba.csp.sentinel.dashboard.rule.DynamicRulePublisher;
+import com.alibaba.csp.sentinel.dashboard.service.ApolloAuthManager;
+import com.alibaba.csp.sentinel.slots.block.RuleConstant;
+import com.alibaba.csp.sentinel.util.StringUtil;
 
 /**
  * @author Eric Zhao
@@ -64,6 +64,8 @@ public class AuthorityRuleController {
 	@Autowired
 	@Qualifier("authorityRuleApolloPublisher")
 	private DynamicRulePublisher<List<AuthorityRuleEntity>> rulePublisher;
+	@Autowired
+	ApolloAuthManager apolloAuthManager;
 
 	@GetMapping("/rules")
 	@AuthAction(PrivilegeType.READ_RULE)
@@ -106,11 +108,22 @@ public class AuthorityRuleController {
 
 	@PostMapping("/rule")
 	@AuthAction(PrivilegeType.WRITE_RULE)
-	public Result<AuthorityRuleEntity> apiAddAuthorityRule(@RequestBody AuthorityRuleEntity entity) {
+	public Result<AuthorityRuleEntity> apiAddAuthorityRule(HttpServletRequest request,
+			@RequestBody AuthorityRuleEntity entity) {
 		Result<AuthorityRuleEntity> checkResult = checkEntityInternal(entity);
 		if (checkResult != null) {
 			return checkResult;
 		}
+
+		try {
+			if (!apolloAuthManager.hasPermission(request, entity.getApp())) {
+				return Result.ofFail(-1,
+						MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限", entity.getApp()));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
+		}
+
 		entity.setId(null);
 		Date date = new Date();
 		entity.setGmtCreate(date);
@@ -129,7 +142,7 @@ public class AuthorityRuleController {
 
 	@PutMapping("/rule/{id}")
 	@AuthAction(PrivilegeType.WRITE_RULE)
-	public Result<AuthorityRuleEntity> apiUpdateParamFlowRule(@PathVariable("id") Long id,
+	public Result<AuthorityRuleEntity> apiUpdateParamFlowRule(HttpServletRequest request, @PathVariable("id") Long id,
 			@RequestBody AuthorityRuleEntity entity) {
 		if (id == null || id <= 0) {
 			return Result.ofFail(-1, "Invalid id");
@@ -138,6 +151,16 @@ public class AuthorityRuleController {
 		if (checkResult != null) {
 			return checkResult;
 		}
+
+		try {
+			if (!apolloAuthManager.hasPermission(request, entity.getApp())) {
+				return Result.ofFail(-1,
+						MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限", entity.getApp()));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
+		}
+
 		entity.setId(id);
 		Date date = new Date();
 		entity.setGmtCreate(null);
@@ -159,7 +182,7 @@ public class AuthorityRuleController {
 
 	@DeleteMapping("/rule/{id}")
 	@AuthAction(PrivilegeType.DELETE_RULE)
-	public Result<Long> apiDeleteRule(@PathVariable("id") Long id) {
+	public Result<Long> apiDeleteRule(HttpServletRequest request, @PathVariable("id") Long id) {
 		if (id == null) {
 			return Result.ofFail(-1, "id cannot be null");
 		}
@@ -167,6 +190,16 @@ public class AuthorityRuleController {
 		if (oldEntity == null) {
 			return Result.ofSuccess(null);
 		}
+
+		try {
+			if (!apolloAuthManager.hasPermission(request, oldEntity.getApp())) {
+				return Result.ofFail(-1, MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限",
+						oldEntity.getApp()));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
+		}
+
 		try {
 			repository.delete(id);
 		} catch (Exception e) {

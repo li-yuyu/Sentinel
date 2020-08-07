@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import com.alibaba.csp.sentinel.dashboard.auth.UserHolder;
 import com.alibaba.csp.sentinel.dashboard.datasource.entity.rule.SystemRuleEntity;
 import com.alibaba.csp.sentinel.dashboard.rule.DynamicRulePublisher;
 import com.alibaba.csp.sentinel.datasource.Converter;
@@ -31,40 +32,46 @@ import com.ctrip.framework.apollo.openapi.dto.OpenItemDTO;
 
 /**
  * @author Lyle
- * @since 2020年7月27日 上午9:42:28 
+ * @since 2020年7月27日 上午9:42:28
  */
 @Component("systemRuleApolloPublisher")
 public class SystemRuleApolloPublisher implements DynamicRulePublisher<List<SystemRuleEntity>> {
 
 	@Value("${app.id}")
 	String appId;
-    @Autowired
-    private ApolloOpenApiClient apolloOpenApiClient;
-    @Autowired
-    private Converter<List<SystemRuleEntity>, String> converter;
+	@Value("${apollo.rule.namespace}")
+	String ruleNamespace;
+	@Value("${spring.profiles.active}")
+	private String active;
+	@Autowired
+	private ApolloOpenApiClient apolloOpenApiClient;
+	@Autowired
+	private Converter<List<SystemRuleEntity>, String> converter;
 
-    @Override
-    public void publish(String app, List<SystemRuleEntity> rules) throws Exception {
-        AssertUtil.notEmpty(app, "app name cannot be empty");
-        if (rules == null) {
-            return;
-        }
+	@Override
+	public void publish(String app, List<SystemRuleEntity> rules) throws Exception {
+		AssertUtil.notEmpty(app, "app name cannot be empty");
+		if (rules == null) {
+			return;
+		}
 
-        // Increase the configuration
-        String ruleKey = ApolloConfigUtil.getSystemRuleKey(app);
-        OpenItemDTO openItemDTO = new OpenItemDTO();
-        openItemDTO.setKey(ruleKey);
-        openItemDTO.setValue(converter.convert(rules));
-        openItemDTO.setComment(app+"系统规则");
-        openItemDTO.setDataChangeCreatedBy("liyuyu");
-        apolloOpenApiClient.createOrUpdateItem(appId, "DEV", "default", "BASE.sentinel-rule", openItemDTO);
+		// Increase the configuration
+		String ruleKey = ApolloConfigUtil.getSystemRuleKey(app);
+		OpenItemDTO openItemDTO = new OpenItemDTO();
+		openItemDTO.setKey(ruleKey);
+		openItemDTO.setValue(converter.convert(rules));
+		openItemDTO.setComment(app + "系统规则");
+		openItemDTO.setDataChangeCreatedBy(UserHolder.getCurrentUser().getId());
+		apolloOpenApiClient.createOrUpdateItem(appId, ApolloConfigUtil.getEnv(active),
+				ApolloConfigUtil.getCluster(active), ruleNamespace, openItemDTO);
 
-        // Release configuration
-        NamespaceReleaseDTO namespaceReleaseDTO = new NamespaceReleaseDTO();
-        namespaceReleaseDTO.setEmergencyPublish(true);
-        namespaceReleaseDTO.setReleaseComment("Modify or add configurations");
-        namespaceReleaseDTO.setReleasedBy("liyuyu");
-        namespaceReleaseDTO.setReleaseTitle("Modify or add configurations");
-        apolloOpenApiClient.publishNamespace(appId, "DEV", "default", "BASE.sentinel-rule", namespaceReleaseDTO);
-    }
+		// Release configuration
+		NamespaceReleaseDTO namespaceReleaseDTO = new NamespaceReleaseDTO();
+		namespaceReleaseDTO.setEmergencyPublish(true);
+		namespaceReleaseDTO.setReleaseComment("Modify or add configurations");
+		namespaceReleaseDTO.setReleasedBy(UserHolder.getCurrentUser().getId());
+		namespaceReleaseDTO.setReleaseTitle("Modify or add configurations");
+		apolloOpenApiClient.publishNamespace(appId, ApolloConfigUtil.getEnv(active),
+				ApolloConfigUtil.getCluster(active), ruleNamespace, namespaceReleaseDTO);
+	}
 }

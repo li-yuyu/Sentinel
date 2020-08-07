@@ -15,8 +15,11 @@
  */
 package com.alibaba.csp.sentinel.dashboard.controller;
 
+import java.text.MessageFormat;
 import java.util.Date;
 import java.util.List;
+
+import javax.servlet.http.HttpServletRequest;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +37,7 @@ import com.alibaba.csp.sentinel.dashboard.domain.Result;
 import com.alibaba.csp.sentinel.dashboard.repository.rule.InMemDegradeRuleStore;
 import com.alibaba.csp.sentinel.dashboard.rule.DynamicRuleProvider;
 import com.alibaba.csp.sentinel.dashboard.rule.DynamicRulePublisher;
+import com.alibaba.csp.sentinel.dashboard.service.ApolloAuthManager;
 import com.alibaba.csp.sentinel.slots.block.RuleConstant;
 import com.alibaba.csp.sentinel.util.StringUtil;
 
@@ -54,6 +58,8 @@ public class DegradeController {
 	@Autowired
 	@Qualifier("degradeRuleApolloPublisher")
 	private DynamicRulePublisher<List<DegradeRuleEntity>> rulePublisher;
+	@Autowired
+	ApolloAuthManager apolloAuthManager;
 
 	@ResponseBody
 	@RequestMapping("/rules.json")
@@ -75,8 +81,8 @@ public class DegradeController {
 	@ResponseBody
 	@RequestMapping("/new.json")
 	@AuthAction(PrivilegeType.WRITE_RULE)
-	public Result<DegradeRuleEntity> add(String app, String limitApp, String resource, Double count, Integer timeWindow,
-			Integer grade) {
+	public Result<DegradeRuleEntity> add(HttpServletRequest request, String app, String limitApp, String resource,
+			Double count, Integer timeWindow, Integer grade) {
 		if (StringUtil.isBlank(app)) {
 			return Result.ofFail(-1, "app can't be null or empty");
 		}
@@ -98,6 +104,16 @@ public class DegradeController {
 		if (grade < RuleConstant.DEGRADE_GRADE_RT || grade > RuleConstant.DEGRADE_GRADE_EXCEPTION_COUNT) {
 			return Result.ofFail(-1, "Invalid grade: " + grade);
 		}
+
+		try {
+			if (!apolloAuthManager.hasPermission(request, app)) {
+				return Result.ofFail(-1,
+						MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限", app));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
+		}
+
 		DegradeRuleEntity entity = new DegradeRuleEntity();
 		entity.setApp(app.trim());
 		entity.setLimitApp(limitApp.trim());
@@ -123,8 +139,8 @@ public class DegradeController {
 	@ResponseBody
 	@RequestMapping("/save.json")
 	@AuthAction(PrivilegeType.WRITE_RULE)
-	public Result<DegradeRuleEntity> updateIfNotNull(Long id, String app, String limitApp, String resource,
-			Double count, Integer timeWindow, Integer grade) {
+	public Result<DegradeRuleEntity> updateIfNotNull(HttpServletRequest request, Long id, String app, String limitApp,
+			String resource, Double count, Integer timeWindow, Integer grade) {
 		if (id == null) {
 			return Result.ofFail(-1, "id can't be null");
 		}
@@ -136,6 +152,15 @@ public class DegradeController {
 		DegradeRuleEntity entity = repository.findById(id);
 		if (entity == null) {
 			return Result.ofFail(-1, "id " + id + " dose not exist");
+		}
+
+		try {
+			if (!apolloAuthManager.hasPermission(request, entity.getApp())) {
+				return Result.ofFail(-1,
+						MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限", entity.getApp()));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
 		}
 
 		if (StringUtil.isNotBlank(app)) {
@@ -174,7 +199,7 @@ public class DegradeController {
 	@ResponseBody
 	@RequestMapping("/delete.json")
 	@AuthAction(PrivilegeType.DELETE_RULE)
-	public Result<Long> delete(Long id) {
+	public Result<Long> delete(HttpServletRequest request, Long id) {
 		if (id == null) {
 			return Result.ofFail(-1, "id can't be null");
 		}
@@ -182,6 +207,15 @@ public class DegradeController {
 		DegradeRuleEntity oldEntity = repository.findById(id);
 		if (oldEntity == null) {
 			return Result.ofSuccess(null);
+		}
+
+		try {
+			if (!apolloAuthManager.hasPermission(request, oldEntity.getApp())) {
+				return Result.ofFail(-1, MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限",
+						oldEntity.getApp()));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
 		}
 
 		try {

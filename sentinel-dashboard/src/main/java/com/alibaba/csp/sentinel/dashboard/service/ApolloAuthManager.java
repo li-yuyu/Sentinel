@@ -16,7 +16,11 @@
 package com.alibaba.csp.sentinel.dashboard.service;
 
 import java.text.MessageFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+
+import javax.servlet.http.HttpServletRequest;
 
 import org.apache.http.Header;
 import org.apache.http.HeaderElement;
@@ -29,8 +33,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.alibaba.csp.sentinel.dashboard.rule.apollo.ApolloConfigUtil;
+import com.alibaba.csp.sentinel.dashboard.util.CookieUtil;
 import com.alibaba.csp.sentinel.dashboard.util.HttpUtils;
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 
 /**
@@ -46,9 +53,8 @@ public class ApolloAuthManager {
 
 	@Value("${apollo.portal.url}")
 	private String apolloPortalUrl;
-
 	@Value("${spring.profiles.active}")
-	private String env;
+	private String active;
 
 	/**
 	 * @param username
@@ -57,7 +63,7 @@ public class ApolloAuthManager {
 	 * @throws Exception
 	 */
 	public String login(String username, String password) throws Exception {
-		HttpResponse response = HttpUtils.post(apolloPortalUrl + "signin", Arrays
+		HttpResponse response = HttpUtils.post(apolloPortalUrl + "/signin", Arrays
 				.asList(new BasicNameValuePair("username", username), new BasicNameValuePair("password", password)));
 
 		int statusCode = response.getStatusLine().getStatusCode();
@@ -68,7 +74,7 @@ public class ApolloAuthManager {
 
 		Header location = response.getFirstHeader("Location");
 		Header setCookie = response.getFirstHeader("Set-Cookie");
-		if (location != null && location.getValue() != null && location.getValue().equals(apolloPortalUrl)
+		if (location != null && location.getValue() != null && location.getValue().equals(apolloPortalUrl + "/")
 				&& setCookie != null && setCookie.getValue() != null) {
 			HeaderElement[] elements = setCookie.getElements();
 			for (HeaderElement headerElement : elements) {
@@ -86,7 +92,9 @@ public class ApolloAuthManager {
 	 * @return username
 	 * @throws Exception
 	 */
-	public String getUsername(String sessionId) throws Exception {
+	public String getUsername(HttpServletRequest request) throws Exception {
+		String sessionId = CookieUtil.getValue(request, APOLLO_SESSIONID_KEY);
+
 		HttpResponse response = HttpUtils.get(apolloPortalUrl + "/user",
 				new BasicHeader("Cookie", "JSESSIONID=" + sessionId));
 
@@ -107,7 +115,9 @@ public class ApolloAuthManager {
 		return null;
 	}
 
-	public boolean hasPermission(String sessionId, String app) throws Exception {
+	public boolean hasPermission(HttpServletRequest request, String app) throws Exception {
+		String sessionId = CookieUtil.getValue(request, APOLLO_SESSIONID_KEY);
+
 		if (hasAllEnvPermission(sessionId, app)) {
 			return true;
 		}
@@ -115,6 +125,33 @@ public class ApolloAuthManager {
 			return true;
 		}
 		return false;
+	}
+
+	public List<String> getAppsByOwner(HttpServletRequest request) throws Exception {
+		String sessionId = CookieUtil.getValue(request, APOLLO_SESSIONID_KEY);
+		String username = getUsername(request);
+
+		String url = MessageFormat.format("{0}/apps/by-owner?owner={1}&page=0&size=10000", apolloPortalUrl, username);
+
+		HttpResponse response = HttpUtils.get(url, new BasicHeader("Cookie", "JSESSIONID=" + sessionId));
+
+		int statusCode = response.getStatusLine().getStatusCode();
+		if (statusCode != 200) {
+			LOGGER.warn("status code : {}, result :{}", statusCode, EntityUtils.toString(response.getEntity()));
+			throw new RuntimeException("Apollo communication exception");
+		}
+
+		Header contentType = response.getEntity().getContentType();
+		if (contentType.getValue().startsWith("application/json")) {
+			String string = EntityUtils.toString(response.getEntity());
+			List<JSONObject> jsonArray = JSON.parseArray(string, JSONObject.class);
+			List<String> list = new ArrayList<String>();
+			for (JSONObject jsonObject : jsonArray) {
+				list.add(jsonObject.getString("appId"));
+			}
+			return list;
+		}
+		throw new RuntimeException("登录已失效");
 	}
 
 	/**
@@ -157,7 +194,7 @@ public class ApolloAuthManager {
 	 */
 	private boolean hasEnvPermission(String sessionId, String app) throws Exception {
 		String url = MessageFormat.format("{0}/apps/{1}/envs/{2}/namespaces/{3}/permissions/ReleaseNamespace",
-				apolloPortalUrl, app, env, "application");
+				apolloPortalUrl, app, ApolloConfigUtil.getEnv(active), "application");
 
 		HttpResponse response = HttpUtils.get(url, new BasicHeader("Cookie", "JSESSIONID=" + sessionId));
 

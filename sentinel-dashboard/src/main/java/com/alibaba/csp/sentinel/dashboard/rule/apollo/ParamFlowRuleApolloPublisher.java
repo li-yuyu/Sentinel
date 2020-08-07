@@ -1,3 +1,4 @@
+package com.alibaba.csp.sentinel.dashboard.rule.apollo;
 ///*
 // * Copyright 1999-2018 Alibaba Group Holding Ltd.
 // *

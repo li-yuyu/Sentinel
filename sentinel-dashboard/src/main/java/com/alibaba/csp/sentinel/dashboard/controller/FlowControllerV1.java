@@ -15,9 +15,12 @@
  */
 package com.alibaba.csp.sentinel.dashboard.controller;
 
+import java.text.MessageFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+
+import javax.servlet.http.HttpServletRequest;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,13 +37,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.alibaba.csp.sentinel.dashboard.auth.AuthAction;
 import com.alibaba.csp.sentinel.dashboard.auth.AuthService.PrivilegeType;
-import com.alibaba.csp.sentinel.dashboard.client.SentinelApiClient;
 import com.alibaba.csp.sentinel.dashboard.datasource.entity.rule.FlowRuleEntity;
-import com.alibaba.csp.sentinel.dashboard.discovery.MachineInfo;
 import com.alibaba.csp.sentinel.dashboard.domain.Result;
 import com.alibaba.csp.sentinel.dashboard.repository.rule.InMemoryRuleRepositoryAdapter;
 import com.alibaba.csp.sentinel.dashboard.rule.DynamicRuleProvider;
 import com.alibaba.csp.sentinel.dashboard.rule.DynamicRulePublisher;
+import com.alibaba.csp.sentinel.dashboard.service.ApolloAuthManager;
 import com.alibaba.csp.sentinel.util.StringUtil;
 
 /**
@@ -63,11 +65,12 @@ public class FlowControllerV1 {
 	@Autowired
 	@Qualifier("flowRuleApolloPublisher")
 	private DynamicRulePublisher<List<FlowRuleEntity>> rulePublisher;
+	@Autowired
+	ApolloAuthManager apolloAuthManager;
 
 	@GetMapping("/rules")
 	@AuthAction(PrivilegeType.READ_RULE)
 	public Result<List<FlowRuleEntity>> apiQueryMachineRules(@RequestParam String app) {
-
 		if (StringUtil.isEmpty(app)) {
 			return Result.ofFail(-1, "app can't be null or empty");
 		}
@@ -132,11 +135,21 @@ public class FlowControllerV1 {
 
 	@PostMapping("/rule")
 	@AuthAction(PrivilegeType.WRITE_RULE)
-	public Result<FlowRuleEntity> apiAddFlowRule(@RequestBody FlowRuleEntity entity) {
+	public Result<FlowRuleEntity> apiAddFlowRule(HttpServletRequest request, @RequestBody FlowRuleEntity entity) {
 		Result<FlowRuleEntity> checkResult = checkEntityInternal(entity);
 		if (checkResult != null) {
 			return checkResult;
 		}
+
+		try {
+			if (!apolloAuthManager.hasPermission(request, entity.getApp())) {
+				return Result.ofFail(-1,
+						MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限", entity.getApp()));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
+		}
+
 		entity.setId(null);
 		Date date = new Date();
 		entity.setGmtCreate(date);
@@ -157,8 +170,8 @@ public class FlowControllerV1 {
 
 	@PutMapping("/save.json")
 	@AuthAction(PrivilegeType.WRITE_RULE)
-	public Result<FlowRuleEntity> apiUpdateFlowRule(Long id, String app, String limitApp, String resource,
-			Integer grade, Double count, Integer strategy, String refResource, Integer controlBehavior,
+	public Result<FlowRuleEntity> apiUpdateFlowRule(HttpServletRequest request, Long id, String app, String limitApp,
+			String resource, Integer grade, Double count, Integer strategy, String refResource, Integer controlBehavior,
 			Integer warmUpPeriodSec, Integer maxQueueingTimeMs) {
 		if (id == null) {
 			return Result.ofFail(-1, "id can't be null");
@@ -167,6 +180,16 @@ public class FlowControllerV1 {
 		if (entity == null) {
 			return Result.ofFail(-1, "id " + id + " dose not exist");
 		}
+
+		try {
+			if (!apolloAuthManager.hasPermission(request, entity.getApp())) {
+				return Result.ofFail(-1,
+						MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限", entity.getApp()));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
+		}
+
 		if (StringUtil.isNotBlank(app)) {
 			entity.setApp(app.trim());
 		}
@@ -235,14 +258,22 @@ public class FlowControllerV1 {
 
 	@DeleteMapping("/delete.json")
 	@AuthAction(PrivilegeType.WRITE_RULE)
-	public Result<Long> apiDeleteFlowRule(Long id) {
-
+	public Result<Long> apiDeleteFlowRule(HttpServletRequest request, Long id) {
 		if (id == null) {
 			return Result.ofFail(-1, "id can't be null");
 		}
 		FlowRuleEntity oldEntity = repository.findById(id);
 		if (oldEntity == null) {
 			return Result.ofSuccess(null);
+		}
+
+		try {
+			if (!apolloAuthManager.hasPermission(request, oldEntity.getApp())) {
+				return Result.ofFail(-1, MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限",
+						oldEntity.getApp()));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
 		}
 
 		try {

@@ -26,9 +26,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.alibaba.csp.sentinel.dashboard.auth.ApolloWebAuthServiceImpl;
+import com.alibaba.csp.sentinel.dashboard.auth.ApolloAuthServiceImpl;
 import com.alibaba.csp.sentinel.dashboard.auth.AuthService;
-import com.alibaba.csp.sentinel.dashboard.auth.SimpleWebAuthServiceImpl;
 import com.alibaba.csp.sentinel.dashboard.domain.Result;
 import com.alibaba.csp.sentinel.dashboard.service.ApolloAuthManager;
 import com.alibaba.csp.sentinel.dashboard.util.CookieUtil;
@@ -57,22 +56,19 @@ public class AuthController {
 			return Result.ofFail(-1, "Invalid username or password");
 		}
 
-		String apolloSessionId;
 		try {
-			apolloSessionId = apolloAuthManager.login(username, password);
+			String apolloSessionId = apolloAuthManager.login(username, password);
+			if (apolloSessionId == null) {
+				return Result.ofFail(-1, "Invalid username or password");
+			}
+			
+			CookieUtil.set(response, ApolloAuthManager.APOLLO_SESSIONID_KEY, apolloSessionId, false);
+			AuthService.AuthUser authUser = new ApolloAuthServiceImpl.ApolloAuthUserImpl(username);
+			return Result.ofSuccess(authUser);
 		} catch (Exception e) {
 			LOGGER.warn("登录异常", e);
 			return Result.ofFail(-1, "登录异常,请联系管理员");
 		}
-		if (apolloSessionId == null) {
-			return Result.ofFail(-1, "Invalid username or password");
-		}
-
-		CookieUtil.set(response, ApolloAuthManager.APOLLO_SESSIONID_KEY, apolloSessionId, false);
-
-		AuthService.AuthUser authUser = new ApolloWebAuthServiceImpl.ApolloWebAuthUserImpl(username);
-
-		return Result.ofSuccess(authUser);
 	}
 
 	@PostMapping(value = "/logout")

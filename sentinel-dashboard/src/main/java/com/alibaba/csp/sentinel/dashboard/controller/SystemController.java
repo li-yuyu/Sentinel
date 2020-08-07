@@ -15,8 +15,11 @@
  */
 package com.alibaba.csp.sentinel.dashboard.controller;
 
+import java.text.MessageFormat;
 import java.util.Date;
 import java.util.List;
+
+import javax.servlet.http.HttpServletRequest;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +36,7 @@ import com.alibaba.csp.sentinel.dashboard.domain.Result;
 import com.alibaba.csp.sentinel.dashboard.repository.rule.RuleRepository;
 import com.alibaba.csp.sentinel.dashboard.rule.DynamicRuleProvider;
 import com.alibaba.csp.sentinel.dashboard.rule.DynamicRulePublisher;
+import com.alibaba.csp.sentinel.dashboard.service.ApolloAuthManager;
 import com.alibaba.csp.sentinel.util.StringUtil;
 
 /**
@@ -52,6 +56,8 @@ public class SystemController {
 	@Autowired
 	@Qualifier("systemRuleApolloPublisher")
 	private DynamicRulePublisher<List<SystemRuleEntity>> rulePublisher;
+	@Autowired
+	ApolloAuthManager apolloAuthManager;
 
 	private <R> Result<R> checkBasicParams(String app) {
 		if (StringUtil.isEmpty(app)) {
@@ -89,8 +95,16 @@ public class SystemController {
 
 	@RequestMapping("/new.json")
 	@AuthAction(PrivilegeType.WRITE_RULE)
-	public Result<SystemRuleEntity> apiAdd(String app, Double highestSystemLoad, Double highestCpuUsage, Long avgRt,
-			Long maxThread, Double qps) {
+	public Result<SystemRuleEntity> apiAdd(HttpServletRequest request, String app, Double highestSystemLoad,
+			Double highestCpuUsage, Long avgRt, Long maxThread, Double qps) {
+		try {
+			if (!apolloAuthManager.hasPermission(request, app)) {
+				return Result.ofFail(-1,
+						MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限", app));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
+		}
 
 		Result<SystemRuleEntity> checkResult = checkBasicParams(app);
 		if (checkResult != null) {
@@ -152,14 +166,23 @@ public class SystemController {
 
 	@GetMapping("/save.json")
 	@AuthAction(PrivilegeType.WRITE_RULE)
-	public Result<SystemRuleEntity> apiUpdateIfNotNull(Long id, String app, Double highestSystemLoad,
-			Double highestCpuUsage, Long avgRt, Long maxThread, Double qps) {
+	public Result<SystemRuleEntity> apiUpdateIfNotNull(HttpServletRequest request, Long id, String app,
+			Double highestSystemLoad, Double highestCpuUsage, Long avgRt, Long maxThread, Double qps) {
 		if (id == null) {
 			return Result.ofFail(-1, "id can't be null");
 		}
 		SystemRuleEntity entity = repository.findById(id);
 		if (entity == null) {
 			return Result.ofFail(-1, "id " + id + " dose not exist");
+		}
+
+		try {
+			if (!apolloAuthManager.hasPermission(request, entity.getApp())) {
+				return Result.ofFail(-1,
+						MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限", entity.getApp()));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
 		}
 
 		if (StringUtil.isNotBlank(app)) {
@@ -214,7 +237,7 @@ public class SystemController {
 
 	@RequestMapping("/delete.json")
 	@AuthAction(PrivilegeType.DELETE_RULE)
-	public Result<?> delete(Long id) {
+	public Result<?> delete(HttpServletRequest request, Long id) {
 		if (id == null) {
 			return Result.ofFail(-1, "id can't be null");
 		}
@@ -222,6 +245,16 @@ public class SystemController {
 		if (oldEntity == null) {
 			return Result.ofSuccess(null);
 		}
+
+		try {
+			if (!apolloAuthManager.hasPermission(request, oldEntity.getApp())) {
+				return Result.ofFail(-1, MessageFormat.format("无权限,需要在Apollo拥有AppId:{0}的application.properties发布权限",
+						oldEntity.getApp()));
+			}
+		} catch (Exception e) {
+			return Result.ofThrowable(-1, e);
+		}
+
 		try {
 			repository.delete(id);
 		} catch (Throwable throwable) {
