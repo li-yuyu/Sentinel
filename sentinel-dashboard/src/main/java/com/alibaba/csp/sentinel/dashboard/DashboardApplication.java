@@ -15,10 +15,12 @@
  */
 package com.alibaba.csp.sentinel.dashboard;
 
-import com.alibaba.csp.sentinel.init.InitExecutor;
-
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.web.servlet.support.SpringBootServletInitializer;
+
+import com.alibaba.csp.sentinel.init.InitExecutor;
 
 /**
  * Sentinel dashboard application.
@@ -26,14 +28,19 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @author Carpenter Lee
  */
 @SpringBootApplication
-public class DashboardApplication {
+public class DashboardApplication extends SpringBootServletInitializer {
 
-    public static void main(String[] args) {
-        triggerSentinelInit();
-        SpringApplication.run(DashboardApplication.class, args);
-    }
+	public static void main(String[] args) {
+		triggerSentinelInit();
+		SpringApplication.run(DashboardApplication.class, args);
+	}
 
-    private static void triggerSentinelInit() {
-        new Thread(() -> InitExecutor.doInit()).start();
-    }
+	private static void triggerSentinelInit() {
+		new Thread(() -> InitExecutor.doInit()).start();
+	}
+
+	@Override
+	protected SpringApplicationBuilder configure(SpringApplicationBuilder builder) {
+		return builder.sources(DashboardApplication.class);
+	}
 }

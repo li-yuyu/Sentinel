@@ -16,6 +16,7 @@
 package com.alibaba.csp.sentinel.dashboard.repository.rule;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -42,7 +43,7 @@ public abstract class InMemoryRuleRepositoryAdapter<T extends RuleEntity> implem
     @Override
     public T save(T entity) {
         if (entity.getId() == null) {
-            entity.setId(nextId());
+            entity.setId(maxId(allRules.keySet())+1);
         }
         T processedEntity = preProcess(entity);
         if (processedEntity != null) {
@@ -124,6 +125,19 @@ public abstract class InMemoryRuleRepositoryAdapter<T extends RuleEntity> implem
      * Get next unused id.
      *
      * @return next unused id
+     * @throws Exception 
      */
     abstract protected long nextId();
+    
+	protected long maxId(Collection<Long> c) {
+		long id = 0;
+		if (c != null) {
+			for (Long key : c) {
+				if (key >= id) {
+					id = key;
+				}
+			}
+		}
+		return id;
+	}
 }

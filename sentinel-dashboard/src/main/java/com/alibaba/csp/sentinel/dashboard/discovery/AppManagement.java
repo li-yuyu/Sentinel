@@ -34,7 +34,7 @@ public class AppManagement implements MachineDiscovery {
 
     @PostConstruct
     public void init() {
-        machineDiscovery = context.getBean(SimpleMachineDiscovery.class);
+        machineDiscovery = context.getBean(RedisMachineDiscovery.class);
     }
 
     @Override

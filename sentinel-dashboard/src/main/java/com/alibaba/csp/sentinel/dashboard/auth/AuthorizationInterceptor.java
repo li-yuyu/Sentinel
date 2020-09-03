@@ -42,24 +42,24 @@ public class AuthorizationInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
-        if (handler.getClass().isAssignableFrom(HandlerMethod.class)) {
-            Method method = ((HandlerMethod) handler).getMethod();
-
-            AuthAction authAction = method.getAnnotation(AuthAction.class);
-            if (authAction != null) {
-                AuthService.AuthUser authUser = authService.getAuthUser(request);
-                if (authUser == null) {
-                    responseNoPrivilegeMsg(response, authAction.message());
-                    return false;
-                }
-                String target = request.getParameter(authAction.targetName());
-
-                if (!authUser.authTarget(target, authAction.value())) {
-                    responseNoPrivilegeMsg(response, authAction.message());
-                    return false;
-                }
-            }
-        }
+//        if (handler.getClass().isAssignableFrom(HandlerMethod.class)) {
+//            Method method = ((HandlerMethod) handler).getMethod();
+//
+//            AuthAction authAction = method.getAnnotation(AuthAction.class);
+//            if (authAction != null) {
+//                AuthService.AuthUser authUser = authService.getAuthUser(request);
+//                if (authUser == null) {
+//                    responseNoPrivilegeMsg(response, authAction.message());
+//                    return false;
+//                }
+//                String target = request.getParameter(authAction.targetName());
+//
+//                if (!authUser.authTarget(target, authAction.value())) {
+//                    responseNoPrivilegeMsg(response, authAction.message());
+//                    return false;
+//                }
+//            }
+//        }
 
         return true;
     }

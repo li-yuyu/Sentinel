@@ -132,4 +132,9 @@ public class AppInfo {
     public boolean isDead() {
         return !heartbeatJudge(DashboardConfig.getRemoveAppNoMachineMillis());
     }
+
+	public void setMachines(Set<MachineInfo> machines) {
+		this.machines = machines;
+	}
+    
 }

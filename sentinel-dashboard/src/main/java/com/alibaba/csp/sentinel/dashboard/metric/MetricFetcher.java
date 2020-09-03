@@ -20,8 +20,10 @@ import java.net.SocketTimeoutException;
 import java.nio.charset.Charset;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -46,6 +48,9 @@ import com.alibaba.csp.sentinel.node.metric.MetricNode;
 import com.alibaba.csp.sentinel.util.StringUtil;
 
 import com.alibaba.csp.sentinel.dashboard.repository.metric.MetricsRepository;
+import com.alibaba.csp.sentinel.dashboard.util.RedisLock;
+import com.alibaba.csp.sentinel.dashboard.util.RedisUtils;
+
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.concurrent.FutureCallback;
@@ -59,6 +64,9 @@ import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.BoundHashOperations;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 /**
@@ -78,12 +86,25 @@ public class MetricFetcher {
     private static Logger logger = LoggerFactory.getLogger(MetricFetcher.class);
     private final long intervalSecond = 1;
 
-    private Map<String, AtomicLong> appLastFetchTime = new ConcurrentHashMap<>();
+//    private Map<String, AtomicLong> appLastFetchTime = new ConcurrentHashMap<>();
+    
+    /**
+     * hash {app:timestamp}
+     */
+    public static final String APP_LAST_FETCH_TIME_HASH_KEY = "sentinel:metric.fetcher:last.fetch.time";
+    public static final String LOCK_PREFIX = "sentinel:metric.fetcher:lock:";
+    public static final Map<String, Long> appFetchEndTime = new ConcurrentHashMap<>();
 
     @Autowired
     private MetricsRepository<MetricEntity> metricStore;
     @Autowired
     private AppManagement appManagement;
+    @Autowired
+    @Qualifier("stringRedisTemplate")
+    public RedisTemplate<String, String> stringRedisTemplate;
+    @Autowired
+    @Qualifier("longRedisTemplate")
+    public RedisTemplate<String, Long> longRedisTemplate;
 
     private CloseableHttpAsyncClient httpclient;
 
@@ -127,7 +148,8 @@ public class MetricFetcher {
     private void start() {
         fetchScheduleService.scheduleAtFixedRate(() -> {
             try {
-                fetchAllApp();
+//                fetchAllApp();
+            	fetchAndStopInTheEnd();
             } catch (Exception e) {
                 logger.info("fetchAllApp error:", e);
             }
@@ -164,6 +186,31 @@ public class MetricFetcher {
             });
         }
     }
+    
+	public static void fetchMetric(String app) {
+		appFetchEndTime.put(app, System.currentTimeMillis() + 1000 * 60);
+	}
+    
+	private void fetchAndStopInTheEnd() {
+		if (appFetchEndTime == null || appFetchEndTime.size() == 0) {
+			return;
+		}
+		Iterator<Entry<String, Long>> iterator = appFetchEndTime.entrySet().iterator();
+		while (iterator.hasNext()) {
+			Entry<String, Long> entry = iterator.next();
+			if (entry.getValue() < System.currentTimeMillis()) {
+				iterator.remove();
+				continue;
+			}
+			fetchService.submit(() -> {
+				try {
+					doFetchAppMetric(entry.getKey());
+				} catch (Exception e) {
+					logger.error("fetchAppMetric error", e);
+				}
+			});
+		}
+	}
 
     /**
      * fetch metric between [startTime, endTime], both side inclusive
@@ -173,6 +220,9 @@ public class MetricFetcher {
             throw new IllegalArgumentException("maxWaitSeconds must > 0, but " + maxWaitSeconds);
         }
         AppInfo appInfo = appManagement.getDetailApp(app);
+        if (appInfo == null) {
+			return;
+		}
         // auto remove for app
         if (appInfo.isDead()) {
             logger.info("Dead app removed: {}", app);
@@ -259,10 +309,13 @@ public class MetricFetcher {
     }
 
     private void doFetchAppMetric(final String app) {
-        long now = System.currentTimeMillis();
+    	BoundHashOperations<String, String, Long> boundHashOps = longRedisTemplate.boundHashOps(APP_LAST_FETCH_TIME_HASH_KEY);
+    	Long appLastFetchTime = boundHashOps.get(app);
+    	
+        long now = RedisUtils.currentTimeMillis(longRedisTemplate);
         long lastFetchMs = now - MAX_LAST_FETCH_INTERVAL_MS;
-        if (appLastFetchTime.containsKey(app)) {
-            lastFetchMs = Math.max(lastFetchMs, appLastFetchTime.get(app).get() + 1000);
+        if (appLastFetchTime != null) {
+            lastFetchMs = Math.max(lastFetchMs, appLastFetchTime + 1000);
         }
         // trim milliseconds
         lastFetchMs = lastFetchMs / 1000 * 1000;
@@ -272,10 +325,17 @@ public class MetricFetcher {
             return;
         }
         // update last_fetch in advance.
-        appLastFetchTime.computeIfAbsent(app, a -> new AtomicLong()).set(endTime);
         final long finalLastFetchMs = lastFetchMs;
         final long finalEndTime = endTime;
+        
+        RedisLock redisLock = new RedisLock(stringRedisTemplate, LOCK_PREFIX + app + appLastFetchTime,
+        		FETCH_INTERVAL_SECOND * 1000);
         try {
+        	//确保分布式环境下，只有一台机器去拉取同一时间段的metrics
+        	if (!redisLock.tryLock()) {
+        		return;
+        	}
+        	boundHashOps.put(app, endTime);
             // do real fetch async
             fetchWorker.submit(() -> {
                 try {
